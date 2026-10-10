@@ -1,0 +1,71 @@
+name: Build Mealora APK
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Récupérer le projet depuis GitHub
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Installer Flutter
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: 'stable'
+          cache: true
+
+      # 3. Vérifier l'environnement Flutter
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      # 3bis. Recréer le fichier .env à partir des secrets GitHub
+      # (indispensable : pubspec.yaml déclare .env comme asset,
+      # sans ce fichier le build échoue avec "No file or variants
+      # found for asset: .env")
+      - name: Create .env file
+        run: |
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+          echo "SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" >> .env
+
+      # 4. Installer les dépendances
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 5. Vérifier le code
+      # Les warnings/info ne bloquent pas le build
+      - name: Analyze Flutter project
+        run: flutter analyze || true
+
+      # 6. Lancer les tests
+      - name: Run tests
+        run: flutter test
+        continue-on-error: true
+
+      # 7. Construire l'APK Release
+      - name: Build APK
+        run: flutter build apk --release
+
+      # 8. Renommer l'APK
+      - name: Rename APK
+        run: |
+          mkdir -p release
+          cp build/app/outputs/flutter-apk/app-release.apk release/Mealora.apk
+
+      # 9. Publier l'APK comme Artifact GitHub
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mealora-APK
+          path: release/Mealora.apk
+          retention-days: 30
